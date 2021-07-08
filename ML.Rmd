@@ -1,0 +1,80 @@
+---
+title: "ML.Rmd"
+author: "Will S."
+date: "7/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# GOAL 
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+ 
+## Load the packages 
+ The needed packages are below. 
+```{r packages}
+library(caret)
+library(rpart)
+```
+ 
+## Importing data 
+ Assume the user has already downloaded the files on their repo. 
+```{r import}
+training <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+testing <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+```
+
+## Cleaning data 
+ I get rid of NAs and variables that have low variance.
+```{r cleaning}
+NZV <- nearZeroVar(training, saveMetrics=TRUE)
+training <- training[, !NZV$nzv]; testing <- testing[,!NZV$nzv]
+training <- training[,6: length(training)]; testing <- testing[,6: length(testing)]
+cond <- (colSums(is.na(training)) == 0)
+training <- training[, cond]
+testing <- testing[, cond]
+```
+
+## Partitioning 
+ Then I divide the data into training, validation, and testing.
+```{r partition}
+inTrain <- createDataPartition(training$classe, p = 0.70, list = FALSE)
+training <- training[inTrain, ]
+validation <- training[-inTrain, ]
+```
+ 
+## Rree-modeling 
+ First I try tree model.
+```{r tree mod}
+modFit <- train(classe~., method = "rpart", data = training)
+#plot
+plot(modFit$finalModel, uniform = TRUE, main = "the tree graph")
+text(modFit$finalModel, use.n = TRUE, all = TRUE, cex=.8)
+#predicting
+pred <- predict(modFit,newdata=validation)
+#checking the prediction
+cfMatx <-confusionMatrix(factor(validation$classe), pred)
+cfMatx
+```
+ Turns out the accuracy is poor. So I turned to random forests. 
+ 
+## Randomforests
+```{r rf}
+modRF <- train(classe ~ ., 
+               data = training, 
+               method = "rf", 
+               trControl = trainControl(method = "cv", 5), 
+               ntree = 250)
+predRF <- predict(modRF, validation)
+cfMatxRF <- confusionMatrix(factor(validation$classe), predRF)
+cfMatxRF
+```
+ The accuracy is satisfying. So I use this modRF to predict the testing data set. 
+ 
+## Predicting testing set with RF
+```{r testing}
+pred_testing <- predict(modRF, newdata = testing[, -length(names(testing))])
+pred_testing
+```
